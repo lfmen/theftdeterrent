@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="portada_final.png" width="450" alt="Theft Deterrent client" />
+</div>
+
 # Theft Deterrent para Linux moderno
 
 Instalador del cliente Theft Deterrent (equipos de Conectar Igualdad y Plan Juana Manso) para distribuciones basadas en Debian actuales, donde los paquetes oficiales ya no funcionan.
