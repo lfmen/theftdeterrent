@@ -1,125 +1,77 @@
-<div align="center">
+# Theft Deterrent para Linux moderno
 
-<img src="portada_final.png" width="450" alt="Portada de Theft Deterrent" />
+Instalador del cliente Theft Deterrent (equipos de Conectar Igualdad y Plan Juana Manso) para distribuciones basadas en Debian actuales, donde los paquetes oficiales ya no funcionan.
 
-# Theft Deterrent Fix & Installer
+Basado en [Jotalea/TheftDeterrent](https://github.com/Jotalea/TheftDeterrent). Proyecto no oficial, sin relación con Intel ni con el Ministerio de Educación.
 
-[![Basado en](https://img.shields.io/badge/Basado_en-Jotalea%2FTheftDeterrent-lightgray)](https://github.com/Jotalea/TheftDeterrent)
-[![License: MIT](https://img.shields.io/badge/License-MIT-0071C5)](https://opensource.org/licenses/MIT)
-[![OS Support](https://img.shields.io/badge/OS-Linux%20%7C%20Windows-0071C5)](#instalación)
+## Problema
 
-> **Solución definitiva y script de autoconfiguración para Theft Deterrent en distribuciones Linux modernas y Windows.**
+Los paquetes `.deb` de la versión 6.0.0.11 fallan en Ubuntu 22.04+, Linux Mint 21+ y Huayra 6.5+ por dos motivos:
 
-</div>
+1. `theftdeterrentguardian` depende de Python 2, que ya no está en los repositorios, y `apt` queda con dependencias rotas.
+2. El cliente gráfico está enlazado dinámicamente contra `libpython2.7.so.1.0` y se cierra al iniciar si la librería no está instalada.
 
-> [!NOTE]
-> **Basado en el trabajo de [Jotalea/TheftDeterrent](https://github.com/Jotalea/TheftDeterrent)**.  
-> Todos los créditos del repositorio original, la paquetización base y la documentación primaria corresponden a **[Jotalea](https://github.com/Jotalea)**.
+## Qué hace `install.sh`
 
-## Tabla de Contenidos
-
-- [Compatibilidad](#compatibilidad)
-- [El Problema](#el-problema)
-- [La Solución](#la-solución)
-- [Instalación rápida](#instalación-rápida)
-- [Instalación detallada](#instalación-detallada)
-  - [Linux (Debian / Ubuntu / derivadas)](#linux-debian-ubuntu-linux-mint-kali-huayra-65)
-  - [Huayra 5 / 6](#huayra-5--6)
-  - [Windows 10 / 11](#windows-10--11)
-- [Post-Instalación](#post-instalación)
-- [Referencias](#referencias-y-repositorios)
-- [Licencia](#licencia)
+- Instala `libpython2.7` desde `universe` o, si no existe (Ubuntu 24.04, Mint 22), desde el repositorio de Ubuntu 22.04 (Jammy), que agrega temporalmente y quita al terminar.
+- Usa una versión de `theftdeterrentguardian` con metadatos adaptados a Python 3 cuando el sistema no tiene Python 2.
+- Instala los cuatro paquetes desde `deb/` (o los descarga si el script se ejecuta solo).
+- Crea el comando `theftdeterrentclient` y desactiva `GTK_MODULES` en el lanzador para evitar un error de GTK en escritorios actuales.
 
 ## Compatibilidad
 
-| Sistema operativo | Versión | Estado | Notas |
-|:---|:---|:---:|:---|
-| Ubuntu | 22.04 LTS / 24.04 LTS | ✓ | Probado. Requiere `install.sh` |
-| Linux Mint | 21.x / 22.x | ✓ | Probado. Requiere `install.sh` |
-| Huayra Linux | 5 / 6 / 10 | ✓ | Soporte automatizado con `install.sh` |
-| Debian | 10+ | ✓ | Compatible a través de `install.sh` |
-| Windows | 10 / 11 | ✓ | Instaladores en `windows/` |
+| Sistema | Método |
+|:---|:---|
+| Ubuntu 22.04 / 24.04, Linux Mint 21 / 22 | `install.sh` (probado) |
+| Debian 10+, Huayra 6.5+ | `install.sh` |
+| Huayra 5 / 6 | Paquete `theft` de los repositorios de Huayra |
+| Windows 10 / 11 | Instaladores en `windows/` |
 
-## El Problema
+## Instalación en Linux
 
-En distribuciones modernas (como **Linux Mint 21+, Ubuntu 22.04+ o Huayra 6.5+**), la instalación de los paquetes `.deb` originales presenta fallos críticos que impiden su funcionamiento:
-
-1. **Dependencias irresolubles:** El paquete `theftdeterrentclient` exige dependencias *deprecadas*, lo cual rompe la base de datos de `apt`.
-2. **Crash silencioso del cliente:** Los binarios están enlazados estáticamente contra `libpython2.7`, una librería que ya ha sido eliminada de los repositorios actuales.
-
-> [!WARNING]
-> **Nota sobre parches previos:**  
-> El parche comunitario provisto por [Maxelslasarte](https://huayra.educar.gob.ar/ayuda/?qa=user/Maxelslasarte) corrige los *metadatos* (cambiando la dependencia a Python 3), pero **no soluciona** el crash de los *binarios*, ya que estos siguen requiriendo la librería original (`libpython2.7`) en tiempo de ejecución.
-
-## La Solución
-
-Esta solución introduce **mejoras críticas al instalador automatizado (`install.sh`) original** para resolver todos los conflictos de dependencias de forma dinámica y transparente para el usuario:
-
-- **Instalación de dependencias legacy:** Obtiene `libpython2.7` directamente del repositorio `universe` o mediante un *fallback* temporal al archivo de Ubuntu Jammy.
-- **Aplicación inteligente de parches:** Despliega los metadatos parcheados de *Guardian* únicamente si el sistema carece de un entorno Python 2 nativo.
-- **Corrección de rutas:** Soluciona un error tipográfico en la ruta del binario (`TheftDeterrentclient` vs `TheftDeterrentClient`) que impedía la ejecución en versiones anteriores.
-- **Soporte offline/local:** Prioriza el uso de los paquetes `.deb` locales incluidos en el repositorio, permitiendo una instalación más rápida y sin requerir descargar los binarios nuevamente.
-- **Integración del sistema:** Crea los enlaces simbólicos correctos para disponer del comando `theftdeterrentclient` de forma global.
-
-## Instalación (Linux)
-
-Para distribuciones basadas en Debian (Ubuntu, Linux Mint, Kali, Huayra 6.5+), podés instalar el parche de dos maneras:
-
-**Opción A: Rápida (Recomendada)**
-```bash
-wget -qO- https://raw.githubusercontent.com/lfmen/TheftDeterrent/main/install.sh | sudo bash
-```
-
-**Opción B: Clonando el repositorio**
 ```bash
 git clone https://github.com/lfmen/TheftDeterrent.git
 cd TheftDeterrent
 sudo bash install.sh
 ```
 
-> [!TIP]
-> Para instalaciones manuales o auditorías de seguridad, los paquetes `.deb` originales se encuentran aislados en el directorio `deb/`.
+Sin clonar el repositorio:
 
-### Huayra 5 / 6
+```bash
+wget -qO- https://raw.githubusercontent.com/lfmen/TheftDeterrent/main/install.sh | sudo bash
+```
 
-Procede con la instalación convencional a través del gestor de paquetes (Synaptic o `apt` instalando el meta-paquete `theft`). 
-*Si ocurren conflictos de dependencias, recurre al método de instalación de Debian descrito en la sección anterior.*
+Opciones disponibles con `sudo bash install.sh --help`. La salida queda registrada en `tda_install_log.txt`, dentro del directorio de trabajo (`$HOME/tda` de root por defecto).
 
-### Windows 10 / 11
+## Instalación en Windows
 
-1. Ejecuta el instalador ubicado en `windows/Theft Derrent Guardian.exe` *(asegúrate de habilitar la opción de desinstalación sin contraseña)*.
-2. Ejecuta el instalador `windows/Theft Derrent Agent.exe`.
-3. **Reinicia** el sistema operativo.
+1. Ejecutar `windows/Theft Deterrent Guardian.exe` y habilitar la desinstalación sin contraseña.
+2. Ejecutar `windows/Theft Deterrent Agent.exe`.
+3. Reiniciar.
 
-## Post-Instalación
+## Configuración
 
-Una vez instalado, sigue estos pasos para vincular tu equipo:
+1. Abrir el cliente con `theftdeterrentclient` o desde el menú de aplicaciones.
+2. En **Configuración**, indicar el servidor:
+   - Equipos Juana Manso: `citd.dgp.educ.ar`
+   - Resto de los equipos: `tds.educacion.gob.ar`
 
-1. Inicia el demonio o cliente ejecutando el comando `theftdeterrentclient` en la terminal, o búscalo en tu menú de aplicaciones.
-2. Navega al panel de **Configuración**.
-3. Configura el servidor correspondiente a tu red:
-   - **Red Juana Manso:** `citd.dgp.educ.ar`
-   - **Otros equipos:** `tds.educacion.gob.ar`
+## Herramientas de análisis
 
-## 📦 Descargas Formales (Releases)
+Scripts en Python 3.12+ usados para diagnosticar los paquetes, sin dependencias externas:
 
-Las versiones estables y empaquetadas del instalador, junto con los ejecutables `.deb` y `.exe` aislados, se encuentran formalmente distribuidas en la pestaña **[Releases](../../releases)** de este repositorio. Se recomienda descargar desde allí para entornos de producción.
+```bash
+python tools/deb.py info deb/*.deb                  # metadatos de cada paquete
+python tools/deb.py extract <paquete.deb> <destino> # contenido del paquete
+python tools/elf_deps.py <destino>                  # librerías que usa cada binario
+```
 
-<details>
-<summary>Referencias y repositorios</summary>
+## Referencias
 
-- [Jotalea/TheftDeterrent](https://github.com/Jotalea/TheftDeterrent) - Repositorio y documentación original.
-- [Parche de Maxelslasarte](https://huayra.educar.gob.ar/ayuda/?qa=user/Maxelslasarte) - Adaptación de metadatos de Guardian.
-- [HuayraLinux/theftdeterrent6](https://github.com/HuayraLinux/theftdeterrent6) - Paquetización oficial para entornos Huayra 6.
-
-</details>
+- [Jotalea/TheftDeterrent](https://github.com/Jotalea/TheftDeterrent): repositorio y documentación original.
+- [HuayraLinux/theftdeterrent6](https://github.com/HuayraLinux/theftdeterrent6): paquetes oficiales de Huayra.
+- [Maxelslasarte](https://huayra.educar.gob.ar/ayuda/?qa=user/Maxelslasarte): adaptación de los metadatos de guardian a Python 3.
 
 ## Licencia
 
-El cliente de Theft Deterrent es propiedad del **Ministerio de Educación de la República Argentina**. 
-
-El instalador, scripts y herramientas de despliegue de este repositorio se distribuyen bajo la [Licencia MIT](LICENSE).
-
-<div align="center">
-  <i>Desarrollado para mantener la compatibilidad en entornos educativos</i>
-</div>
+El software Theft Deterrent pertenece a sus titulares. Los scripts de este repositorio se distribuyen bajo la [licencia MIT](LICENSE).

@@ -13,276 +13,207 @@ FILES=(
     "theftdeterrentguardian_6.0.0.11.huayra10_amd64.deb"
     "theftdeterrentclient_6.0.0.11.huayra10_amd64.deb"
 )
+GUARDIAN_FILE="theftdeterrentguardian_6.0.0.11.huayra10_amd64.deb"
 PATCHED_FILE="theftdeterrentguardian_6.0.0.11.debian10_amd64.deb"
+AUTORUN="/opt/TheftDeterrentclient/client/Theft_Deterrent_client.autorun"
 DEFAULT_DIR="$HOME/tda"
 LOG_FILE="tda_install_log.txt"
-SCRIPT_VERSION=2
 USE_LOG=true
 CLEANUP=true
 INSTALL=true
 RUN_AFTER_INSTALL=false
 
-# Función para manejar errores
 handle_error() {
-    echo "Error en el paso: $1" >&2
+    echo "Error: $1" >&2
     exit 1
 }
 
-# Función para verificar dependencias de Python para guardian
-check_python() {
-    if dpkg -s python >/dev/null 2>&1 || command -v python2 >/dev/null 2>&1 || command -v python2.6 >/dev/null 2>&1; then
-        echo "Python 2 detectado. Se instalará la versión estándar de guardian."
-        NEED_PATCH="false"
-    else
-        echo "Python 2 no detectado. Se utilizará el parche de guardian para Python 3."
-        NEED_PATCH="true"
-    fi
-}
-
-# Función de ayuda
 show_help() {
     echo "Uso: $0 [OPCIONES]"
     echo "Opciones:"
-    echo "  --solo-descarga, --download-only, -D   No instala el programa, sólo descarga los archivos de instalación"
-    echo "  --help, -H                             Muestra esta ayuda y no ejecuta el resto del script"
-    echo "  --log <archivo>, -L <archivo>          Loguea los resultados al archivo especificado en lugar de $LOG_FILE"
-    echo "  --dir <directorio>, -D <directorio>    Cambia el directorio a usar por el especificado"
-    echo "  --mirror <URL>, -M <URL>               Permite usar un servidor distinto para descargar los archivos"
-    echo "  --no-limpiar, --no-cleanup             Después de la instalación, no borra los archivos .deb que se usaron"
-    echo "  --no-log                               Deshabilita el logging a $LOG_FILE"
-    echo "  --ejecutar, -E                         Ejecuta el programa después de la instalación"
+    echo "  -D, --solo-descarga, --download-only  Solo descarga los paquetes, sin instalar"
+    echo "  -d, --dir <directorio>                Directorio de trabajo (predeterminado: $DEFAULT_DIR)"
+    echo "  -M, --mirror <URL>                    Servidor alternativo para descargar los paquetes"
+    echo "  -L, --log <archivo>                   Archivo de log (predeterminado: $LOG_FILE)"
+    echo "      --no-log                          No guarda log"
+    echo "      --no-limpiar, --no-cleanup        No borra los .deb después de instalar"
+    echo "  -E, --ejecutar                        Abre el cliente al terminar la instalación"
+    echo "  -h, --help                            Muestra esta ayuda"
     exit 0
 }
 
-# Procesar parámetros opcionales
 process_parameters() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --solo-descarga | --download-only | -D)
+            -D | --solo-descarga | --download-only)
                 INSTALL=false
                 CLEANUP=false
                 ;;
-            --no-limpiar | --no-cleanup)
-                CLEANUP=false
+            -d | --dir)
+                shift
+                DEFAULT_DIR="$1"
                 ;;
-            --help | -H)
-                show_help
+            -M | --mirror)
+                shift
+                URL_BASE="$1"
+                ;;
+            -L | --log)
+                shift
+                LOG_FILE="$1"
                 ;;
             --no-log)
                 USE_LOG=false
                 ;;
-            --log | -L)
-                shift
-                LOG_FILE="$1"
+            --no-limpiar | --no-cleanup)
+                CLEANUP=false
                 ;;
-            --dir | -D)
-                shift
-                DIR="$1"
-                validate_directory "$DIR"
-                ;;
-            --mirror | -M)
-                shift
-                URL_BASE="$1"
-                ;;
-            --ejecutar | -E)
+            -E | --ejecutar)
                 RUN_AFTER_INSTALL=true
                 ;;
+            -h | -H | --help)
+                show_help
+                ;;
             *)
-                echo "Parámetro desconocido: $1"
-                exit 1
+                handle_error "parámetro desconocido: $1 (usá --help)"
                 ;;
         esac
         shift
     done
 }
 
-# Función para validar y crear el directorio si no existe
-validate_directory() {
-    local dir="$1"
-    if ! [[ -d "$dir" ]]; then
-        echo "Creando el directorio $dir..."
-        mkdir -p "$dir" || handle_error "No se pudo crear el directorio $dir"
-    fi
-    DEFAULT_DIR="$dir"
-}
-
-# Verificar si se ejecuta como root
 check_root() {
     if [ "$EUID" -ne 0 ]; then
-        handle_error "Este script tiene que ejecutarse como root."
+        handle_error "este script tiene que ejecutarse como root (sudo bash install.sh)."
     fi
 }
 
-# Verificar dependencias
 check_dependencies() {
     echo "Verificando dependencias..."
-    dpkg -s wget &> /dev/null || (apt-get update && apt-get install -y wget) || handle_error "No se pudo instalar wget"
-    dpkg -s dpkg &> /dev/null || handle_error "dpkg no está instalado"
+    command -v dpkg >/dev/null || handle_error "dpkg no está instalado."
+    command -v wget >/dev/null || { apt-get update && apt-get install -y wget; } || handle_error "no se pudo instalar wget."
 }
 
-# Instalar libpython2.7
+# El cliente gráfico está enlazado dinámicamente contra libpython2.7
 install_python_lib() {
     if dpkg -s libpython2.7 >/dev/null 2>&1; then
-        echo "Librería libpython2.7 ya está instalada."
+        echo "libpython2.7 ya está instalada."
         return 0
     fi
 
-    echo "La librería libpython2.7 no está instalada. Es necesaria para el cliente gráfico."
+    echo "Instalando libpython2.7..."
 
-    # Intentar habilitar el repositorio 'universe' (contiene libpython2.7 en Ubuntu 22.04 / Mint 21)
+    # Ubuntu 22.04 / Mint 21: el paquete está en 'universe'
     apt-get install -y software-properties-common >/dev/null 2>&1 || true
     add-apt-repository universe -y >/dev/null 2>&1 || true
     apt-get update -qq
 
     if apt-cache show libpython2.7 >/dev/null 2>&1; then
-        echo "Instalando libpython2.7 desde los repositorios oficiales..."
-        apt-get install -y libpython2.7 || handle_error "No se pudo instalar libpython2.7"
+        apt-get install -y libpython2.7 || handle_error "no se pudo instalar libpython2.7."
+        return 0
+    fi
+
+    # Ubuntu 24.04 / Mint 22: se toma de Jammy con un repositorio temporal
+    local jammy_list="/etc/apt/sources.list.d/python2-jammy-temp.list"
+    trap "rm -f '$jammy_list'; apt-get update -qq 2>/dev/null || true" EXIT
+
+    echo "libpython2.7 no está en los repositorios. Agregando Jammy de forma temporal..."
+    echo "deb http://archive.ubuntu.com/ubuntu/ jammy universe" > "$jammy_list"
+    apt-get update -qq
+    apt-get install -y libpython2.7 || handle_error "no se pudo instalar libpython2.7 desde Jammy."
+
+    rm -f "$jammy_list"
+    apt-get update -qq
+    trap - EXIT
+}
+
+# Sin Python 2 en el sistema se usa el guardian con metadatos parcheados para Python 3
+select_guardian() {
+    if command -v python2 >/dev/null 2>&1 || dpkg -s python >/dev/null 2>&1; then
+        echo "Python 2 detectado: se usa el guardian original."
     else
-        # Fallback avanzado para Linux Mint 22 / Ubuntu 24.04 (donde se eliminó python2.7)
-        local jammy_list="/etc/apt/sources.list.d/python2-jammy-temp.list"
-        # Garantizar que el repo temporal se limpie aunque el script falle
-        trap "rm -f '$jammy_list'; apt-get update -qq 2>/dev/null || true" EXIT
-
-        echo "libpython2.7 no está en los repositorios. Agregando repositorio antiguo temporalmente (Jammy)..."
-        echo "deb http://archive.ubuntu.com/ubuntu/ jammy universe" > "$jammy_list"
-        apt-get update -qq
-
-        echo "Instalando libpython2.7 y sus dependencias..."
-        apt-get install -y libpython2.7 || handle_error "No se pudo instalar libpython2.7 desde el repositorio de Jammy"
-
-        echo "Limpiando repositorio temporal..."
-        rm -f "$jammy_list"
-        apt-get update -qq
-
-        # Desactivar el trap ya que limpiamos manualmente con éxito
-        trap - EXIT
+        echo "Python 2 no detectado: se usa el guardian parcheado para Python 3."
+        FILES=("${FILES[@]/"$GUARDIAN_FILE"/"$PATCHED_FILE"}")
     fi
 }
 
-# Verificar espacio en disco
-check_disk_space() {
-    local required_space_mb=100
-    local available_space_mb=$(df "$DEFAULT_DIR" | tail -1 | awk '{print $4}')
-    available_space_mb=$((available_space_mb / 1024))
+prepare_directory() {
+    mkdir -p "$DEFAULT_DIR" || handle_error "no se pudo crear el directorio $DEFAULT_DIR."
+    cd "$DEFAULT_DIR" || handle_error "no se puede usar el directorio $DEFAULT_DIR."
 
-    if (( available_space_mb < required_space_mb )); then
-        handle_error "No tenés suficiente espacio. Necesitás al menos ${required_space_mb}MB más."
+    local required_mb=100
+    local available_mb
+    available_mb=$(( $(df -Pk . | awk 'NR==2 {print $4}') / 1024 ))
+    if (( available_mb < required_mb )); then
+        handle_error "espacio insuficiente: se necesitan al menos ${required_mb} MB libres en $DEFAULT_DIR."
     fi
 }
 
-# Cambiar al directorio
-change_directory() {
-    cd "$DEFAULT_DIR" || handle_error "No se puede usar el directorio $DEFAULT_DIR"
-}
-
-# Descargar o copiar archivos .deb
 download_files() {
     for FILE in "${FILES[@]}"; do
-        if [ "$FILE" == "theftdeterrentguardian_6.0.0.11.huayra10_amd64.deb" ] && [ "$NEED_PATCH" == "true" ]; then
-            FILE=$PATCHED_FILE
-        fi
-
         if [ -f "$FILE" ]; then
-            echo "Ya tenés el archivo $FILE en el directorio de trabajo."
+            echo "$FILE ya está en el directorio de trabajo."
         elif [ -f "$SCRIPT_DIR/deb/$FILE" ]; then
-            echo "Copiando $FILE desde la carpeta local (deb/)..."
+            echo "Copiando $FILE desde deb/..."
             cp "$SCRIPT_DIR/deb/$FILE" "$FILE"
         else
-            echo "Descargando $FILE desde internet..."
-            wget "$URL_BASE/$FILE" || handle_error "No se pudo descargar $FILE desde $URL_BASE"
-            chown "$USER:$USER" "$FILE"  # Cambiar propietario y grupo al usuario actual
-            chmod 644 "$FILE"            # Establecer permisos rw-r--r--
+            echo "Descargando $FILE..."
+            wget -q "$URL_BASE/$FILE" || handle_error "no se pudo descargar $FILE desde $URL_BASE."
         fi
     done
 }
 
-# Instalar archivos .deb
 install_files() {
     for FILE in "${FILES[@]}"; do
-        if [ "$FILE" == "theftdeterrentguardian_6.0.0.11.huayra10_amd64.deb" ] && [ "$NEED_PATCH" == "true" ]; then
-            FILE=$PATCHED_FILE
-        fi
-
         echo "Instalando $FILE..."
-        dpkg -i "$FILE" || handle_error "No se pudo instalar $FILE"
+        dpkg -i "$FILE" || handle_error "no se pudo instalar $FILE."
     done
 }
 
-# Agregar al PATH
-add_to_path() {
-    local bin_path="/usr/local/bin"
-    # El paquete instala en /opt/TheftDeterrentclient (c minúscula en 'client')
-    local script_path="/opt/TheftDeterrentclient/client/Theft_Deterrent_client.autorun"
-
-    if [[ -f "$script_path" ]]; then
-        echo "Agregando 'theftdeterrentclient' al PATH..."
-        ln -sf "$script_path" "$bin_path/theftdeterrentclient" || handle_error "No se pudo crear el enlace simbólico"
-        
-        # Parchear el autorun para solucionar problemas con libgail/atk-bridge en Ubuntu moderno
-        echo "Aplicando parche de GTK_MODULES al autorun..."
-        sed -i '2i export GTK_MODULES=""' "$script_path"
-        
-        echo "El comando 'theftdeterrentclient' ahora está disponible en el PATH."
-    else
-        echo "Advertencia: no se encontró el autorun en $script_path, omitiendo el enlace simbólico."
+configure_client() {
+    if [[ ! -f "$AUTORUN" ]]; then
+        echo "Advertencia: no se encontró $AUTORUN; no se creó el comando 'theftdeterrentclient'."
+        return 0
     fi
+
+    ln -sf "$AUTORUN" /usr/local/bin/theftdeterrentclient || handle_error "no se pudo crear el enlace simbólico."
+
+    # Evita el error de libgail/atk-bridge en escritorios GTK modernos
+    grep -q '^export GTK_MODULES=""' "$AUTORUN" || sed -i '2i export GTK_MODULES=""' "$AUTORUN"
+
+    echo "Comando 'theftdeterrentclient' disponible."
 }
 
-# Ejecutar el programa
-run_program() {
-    echo "Ejecutando el programa..."
-    /opt/TheftDeterrentclient/client/Theft_Deterrent_client.autorun || handle_error "No se pudo ejecutar el programa"
-}
+process_parameters "$@"
+check_root
+prepare_directory
 
-# Limpiar archivos .deb
-clean_up() {
-    echo "Limpiando archivos .deb..."
-    rm -f *.deb || handle_error "No se pudo borrar los archivos .deb"
-}
-
-# Iniciar logging
-init_logging() {
-    if $USE_LOG; then
-        echo "Instalando..." > "$LOG_FILE"
-    fi
-}
-
-# Procesar parámetros (si se pasan; sin argumentos = instalación normal)
-if [[ $# -gt 0 ]]; then
-    process_parameters "$@"
+if $USE_LOG; then
+    exec > >(tee -a "$LOG_FILE") 2>&1
 fi
 
-# Ejecutar funciones
-check_root
 check_dependencies
-install_python_lib
-validate_directory "$DEFAULT_DIR"
-check_disk_space
-change_directory
-init_logging
-check_python
+select_guardian
 download_files
 
-if [[ "$INSTALL" == true ]]; then
+if $INSTALL; then
+    install_python_lib
     install_files
-    add_to_path
+    configure_client
 fi
 
-if [[ "$RUN_AFTER_INSTALL" == true ]]; then
-    run_program
+if $CLEANUP; then
+    echo "Borrando paquetes .deb..."
+    rm -f -- *.deb
 fi
 
-if [[ "$CLEANUP" == true ]]; then
-    clean_up
+if ! $INSTALL; then
+    echo "Paquetes descargados en $DEFAULT_DIR."
+    exit 0
 fi
 
-# Finalizar
-if $USE_LOG; then
-    echo "Se instaló el Theft Deterrent." >> "$LOG_FILE"
-    echo "Podés leer las instrucciones de post-instalación en https://github.com/lfmen/TheftDeterrent#post-instalación" >> "$LOG_FILE"
-else
-    echo "Se instaló el Theft Deterrent."
-    echo "Podés leer las instrucciones de post-instalación en https://github.com/lfmen/TheftDeterrent#post-instalación"
-fi
+echo "Theft Deterrent instalado."
+echo "Configuración inicial: https://github.com/lfmen/TheftDeterrent#configuración"
 
-exit 0
+if $RUN_AFTER_INSTALL; then
+    "$AUTORUN" || handle_error "no se pudo ejecutar el cliente."
+fi
