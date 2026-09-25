@@ -34,15 +34,15 @@ Los paquetes `.deb` de la versión 6.0.0.11 fallan en Ubuntu 22.04+, Linux Mint 
 ## Instalación en Linux
 
 ```bash
-git clone https://github.com/lfmen/TheftDeterrent.git
-cd TheftDeterrent
+git clone https://github.com/lfmen/theftdeterrent.git
+cd theftdeterrent
 sudo bash install.sh
 ```
 
 Sin clonar el repositorio:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/lfmen/TheftDeterrent/main/install.sh | sudo bash
+wget -qO- https://raw.githubusercontent.com/lfmen/theftdeterrent/main/install.sh | sudo bash
 ```
 
 Opciones disponibles con `sudo bash install.sh --help`. La salida queda registrada en `tda_install_log.txt`, dentro del directorio de trabajo (`$HOME/tda` de root por defecto).

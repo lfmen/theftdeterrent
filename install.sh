@@ -4,7 +4,7 @@
 set -e
 
 # Variables predeterminadas
-URL_BASE="https://raw.githubusercontent.com/lfmen/TheftDeterrent/main/deb"
+URL_BASE="https://raw.githubusercontent.com/lfmen/theftdeterrent/main/deb"
 # Directorio donde está el script (para buscar los .deb locales)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FILES=(
@@ -212,7 +212,7 @@ if ! $INSTALL; then
 fi
 
 echo "Theft Deterrent instalado."
-echo "Configuración inicial: https://github.com/lfmen/TheftDeterrent#configuración"
+echo "Configuración inicial: https://github.com/lfmen/theftdeterrent#configuración"
 
 if $RUN_AFTER_INSTALL; then
     "$AUTORUN" || handle_error "no se pudo ejecutar el cliente."
