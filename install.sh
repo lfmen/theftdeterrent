@@ -23,6 +23,12 @@ CLEANUP=true
 INSTALL=true
 RUN_AFTER_INSTALL=false
 
+# Fedora / familia RPM: los .deb se extraen a mano porque rpm no los instala
+IS_RPM=false
+if [ -f /etc/fedora-release ] || { command -v dnf >/dev/null 2>&1 && ! command -v dpkg >/dev/null 2>&1; }; then
+    IS_RPM=true
+fi
+
 handle_error() {
     echo "Error: $1" >&2
     exit 1
@@ -89,12 +95,23 @@ check_root() {
 
 check_dependencies() {
     echo "Verificando dependencias..."
+    if $IS_RPM; then
+        # ar (binutils) y tar abren los .deb; wget los baja
+        dnf install -y binutils tar xz wget policycoreutils-python-utils             || handle_error "no se pudieron instalar las dependencias con dnf."
+        return 0
+    fi
     command -v dpkg >/dev/null || handle_error "dpkg no está instalado."
     command -v wget >/dev/null || { apt-get update && apt-get install -y wget; } || handle_error "no se pudo instalar wget."
 }
 
 # El cliente gráfico está enlazado dinámicamente contra libpython2.7
 install_python_lib() {
+    if $IS_RPM; then
+        # el cliente trae su propio libpython2.7; el del sistema es un respaldo opcional
+        echo "Instalando python2.7 (opcional)..."
+        dnf install -y python2.7 || echo "Advertencia: python2.7 no está disponible, se usa la librería incluida en el cliente."
+        return 0
+    fi
     if dpkg -s libpython2.7 >/dev/null 2>&1; then
         echo "libpython2.7 ya está instalada."
         return 0
@@ -128,6 +145,8 @@ install_python_lib() {
 
 # Sin Python 2 en el sistema se usa el guardian con metadatos parcheados para Python 3
 select_guardian() {
+    # en Fedora no se resuelven dependencias: se usan los paquetes originales
+    $IS_RPM && return 0
     if command -v python2 >/dev/null 2>&1 || dpkg -s python >/dev/null 2>&1; then
         echo "Python 2 detectado: se usa el guardian original."
     else
@@ -162,7 +181,51 @@ download_files() {
     done
 }
 
+# Extrae un .deb a / y corre su postinst (Fedora)
+extract_deb() {
+    local deb="$1" data ctl
+    data=$(ar t "$deb" | grep '^data\.tar') || handle_error "$deb no tiene data.tar."
+    ctl=$(ar t "$deb" | grep '^control\.tar') || handle_error "$deb no tiene control.tar."
+    # --keep-directory-symlink: /lib y /usr/sbin son enlaces en Fedora
+    ar p "$deb" "$data" | tar -x --keep-directory-symlink -f - -C / || handle_error "no se pudo extraer $deb."
+
+    local tmp
+    tmp=$(mktemp -d)
+    ar p "$deb" "$ctl" | tar -x -f - -C "$tmp"
+    if [ -f "$tmp/postinst" ]; then
+        mkdir -p /tmp/log/theftdeterrentclient/client /tmp/log/theftdeterrentclient/guardian /tmp/log/theftdeterrentdaemon/tpmdaemon
+        sh "$tmp/postinst" || echo "Advertencia: el postinst de $deb devolvió error."
+    fi
+    rm -rf "$tmp"
+}
+
+# SELinux: systemd no ejecuta binarios con etiqueta usr_t/var_t en /usr/local y /opt
+fix_selinux() {
+    command -v getenforce >/dev/null 2>&1 || return 0
+    [ "$(getenforce)" = "Disabled" ] && return 0
+    echo "Ajustando contextos de SELinux..."
+    for dir in '/usr/local/theftdeterrentclient(/.*)?' '/usr/local/theftdeterrentdaemon(/.*)?' '/opt/TheftDeterrentclient(/.*)?'; do
+        semanage fcontext -a -t bin_t "$dir" 2>/dev/null || semanage fcontext -m -t bin_t "$dir" 2>/dev/null || true
+    done
+    restorecon -R /usr/local/theftdeterrentclient /usr/local/theftdeterrentdaemon /opt/TheftDeterrentclient 2>/dev/null || true
+}
+
+install_files_rpm() {
+    # orden: librerías, daemon, guardian, cliente
+    for FILE in "${FILES[@]}"; do
+        echo "Instalando $FILE..."
+        extract_deb "$FILE"
+    done
+    fix_selinux
+    chmod +x /opt/TheftDeterrentclient/client/* /usr/local/theftdeterrentclient/*/* /usr/local/theftdeterrentdaemon/* /usr/sbin/tpmdaemon 2>/dev/null || true
+    systemctl daemon-reload
+    for svc in theftdeterrent-tpmdaemon theftdeterrent-guardian theftdeterrent-agent; do
+        systemctl enable --now "$svc" || echo "Advertencia: no se pudo iniciar $svc (revisá: journalctl -u $svc)."
+    done
+}
+
 install_files() {
+    if $IS_RPM; then install_files_rpm; return 0; fi
     for FILE in "${FILES[@]}"; do
         echo "Instalando $FILE..."
         dpkg -i "$FILE" || handle_error "no se pudo instalar $FILE."

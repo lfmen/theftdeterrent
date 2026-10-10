@@ -4,7 +4,7 @@
 
 # Theft Deterrent para Linux moderno
 
-Instalador del cliente Theft Deterrent (equipos de Conectar Igualdad y Plan Juana Manso) para distribuciones basadas en Debian actuales, donde los paquetes oficiales ya no funcionan.
+Instalador del cliente Theft Deterrent (equipos de Conectar Igualdad y Plan Juana Manso) para distribuciones basadas en Debian actuales y para Fedora, donde los paquetes oficiales ya no funcionan.
 
 Basado en [Jotalea/TheftDeterrent](https://github.com/Jotalea/TheftDeterrent). Proyecto no oficial, sin relación con Intel ni con el Ministerio de Educación.
 
@@ -28,6 +28,7 @@ Los paquetes `.deb` de la versión 6.0.0.11 fallan en Ubuntu 22.04+, Linux Mint 
 |:---|:---|
 | Ubuntu 22.04 / 24.04, Linux Mint 21 / 22 | `install.sh` (probado) |
 | Debian 10+, Huayra 6.5+ | `install.sh` |
+| Fedora Workstation (GNOME) | `install.sh` (extrae los `.deb` a mano; sin probar en hardware real) |
 | Huayra 5 / 6 | Paquete `theft` de los repositorios de Huayra |
 | Windows 10 / 11 | Instaladores en `windows/` |
 
@@ -46,6 +47,17 @@ wget -qO- https://raw.githubusercontent.com/lfmen/theftdeterrent/main/install.sh
 ```
 
 Opciones disponibles con `sudo bash install.sh --help`. La salida queda registrada en `tda_install_log.txt`, dentro del directorio de trabajo (`$HOME/tda` de root por defecto).
+
+### Fedora
+
+`install.sh` detecta Fedora y, en lugar de `dpkg`, hace esto:
+
+- Instala con `dnf` las herramientas para abrir los `.deb` (`binutils`, `tar`, `xz`) y `python2.7` como respaldo.
+- Extrae los cuatro paquetes en `/` y ejecuta sus `postinst`.
+- Marca las carpetas de Theft Deterrent como `bin_t` en SELinux, para que systemd pueda ejecutarlas.
+- Habilita e inicia los servicios `theftdeterrent-tpmdaemon`, `theftdeterrent-guardian` y `theftdeterrent-agent`.
+
+Si un servicio no arranca, revisar `journalctl -u theftdeterrent-agent` y `sudo ausearch -m avc -ts recent`. La extensión de GNOME Shell del cliente es de la era GNOME 3 y puede no cargar en versiones actuales; el cliente se abre igual con `theftdeterrentclient`.
 
 ## Instalación en Windows
 
