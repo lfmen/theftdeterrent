@@ -94,10 +94,10 @@ check_root() {
 }
 
 check_dependencies() {
-    echo "Verificando dependencias..."
+    echo "Verificando dependencias (dnf puede tardar un par de minutos)..."
     if $IS_RPM; then
         # ar (binutils) y tar abren los .deb; wget los baja
-        dnf install -y binutils tar xz wget policycoreutils-python-utils             || handle_error "no se pudieron instalar las dependencias con dnf."
+        timeout 600 dnf install -y binutils tar xz wget policycoreutils-python-utils </dev/null             || handle_error "no se pudieron instalar las dependencias con dnf."
         return 0
     fi
     command -v dpkg >/dev/null || handle_error "dpkg no está instalado."
@@ -109,7 +109,7 @@ install_python_lib() {
     if $IS_RPM; then
         # el cliente trae su propio libpython2.7; el del sistema es un respaldo opcional
         echo "Instalando python2.7 (opcional)..."
-        dnf install -y python2.7 || echo "Advertencia: python2.7 no está disponible, se usa la librería incluida en el cliente."
+        timeout 600 dnf install -y python2.7 </dev/null || echo "Advertencia: python2.7 no está disponible, se usa la librería incluida en el cliente."
         return 0
     fi
     if dpkg -s libpython2.7 >/dev/null 2>&1; then
@@ -194,7 +194,7 @@ extract_deb() {
     ar p "$deb" "$ctl" | tar -x -f - -C "$tmp"
     if [ -f "$tmp/postinst" ]; then
         mkdir -p /tmp/log/theftdeterrentclient/client /tmp/log/theftdeterrentclient/guardian /tmp/log/theftdeterrentdaemon/tpmdaemon
-        sh "$tmp/postinst" || echo "Advertencia: el postinst de $deb devolvió error."
+        timeout 180 sh "$tmp/postinst" </dev/null || echo "Advertencia: el postinst de $deb devolvió error."
     fi
     rm -rf "$tmp"
 }
@@ -220,7 +220,7 @@ install_files_rpm() {
     chmod +x /opt/TheftDeterrentclient/client/* /usr/local/theftdeterrentclient/*/* /usr/local/theftdeterrentdaemon/* /usr/sbin/tpmdaemon 2>/dev/null || true
     systemctl daemon-reload
     for svc in theftdeterrent-tpmdaemon theftdeterrent-guardian theftdeterrent-agent; do
-        systemctl enable --now "$svc" || echo "Advertencia: no se pudo iniciar $svc (revisá: journalctl -u $svc)."
+        systemctl enable "$svc" </dev/null && systemctl start --no-block "$svc" </dev/null || echo "Advertencia: no se pudo iniciar $svc (revisá: journalctl -u $svc)."
     done
 }
 
