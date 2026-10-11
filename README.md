@@ -28,7 +28,7 @@ Los paquetes `.deb` de la versión 6.0.0.11 fallan en Ubuntu 22.04+, Linux Mint 
 |:---|:---|
 | Ubuntu 22.04 / 24.04, Linux Mint 21 / 22 | `install.sh` (probado) |
 | Debian 10+, Huayra 6.5+ | `install.sh` |
-| Fedora Workstation (GNOME) | `install.sh` (extrae los `.deb` a mano; sin probar en hardware real) |
+| Fedora Workstation 44 (GNOME, SELinux) | `install.sh` (probado; extrae los `.deb` a mano) |
 | Huayra 5 / 6 | Paquete `theft` de los repositorios de Huayra |
 | Windows 10 / 11 | Instaladores en `windows/` |
 
@@ -52,7 +52,7 @@ Opciones disponibles con `sudo bash install.sh --help`. La salida queda registra
 
 `install.sh` detecta Fedora y, en lugar de `dpkg`, hace esto:
 
-- Instala con `dnf` las herramientas para abrir los `.deb` (`binutils`, `tar`, `xz`) y `python2.7` como respaldo.
+- Instala con `dnf` las herramientas para abrir los `.deb` (`binutils`, `tar`, `xz`). `python2.7` ya no está en los repositorios de Fedora 44; no hace falta, el cliente trae su propio `libpython2.7`.
 - Extrae los cuatro paquetes en `/` y ejecuta sus `postinst`.
 - Marca las carpetas de Theft Deterrent como `bin_t` en SELinux, para que systemd pueda ejecutarlas.
 - Habilita e inicia los servicios `theftdeterrent-tpmdaemon`, `theftdeterrent-guardian` y `theftdeterrent-agent`.

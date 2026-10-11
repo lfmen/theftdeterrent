@@ -181,17 +181,29 @@ download_files() {
     done
 }
 
+# Descomprime un miembro de un .deb a stdout según su extensión (tar no lo autodetecta por pipe)
+deb_member() {
+    local deb="$1" member="$2"
+    case "$member" in
+        *.xz)   ar p "$deb" "$member" | xz -dc ;;
+        *.zst)  ar p "$deb" "$member" | zstd -dc ;;
+        *.gz)   ar p "$deb" "$member" | gzip -dc ;;
+        *.bz2)  ar p "$deb" "$member" | bzip2 -dc ;;
+        *)      ar p "$deb" "$member" ;;
+    esac
+}
+
 # Extrae un .deb a / y corre su postinst (Fedora)
 extract_deb() {
     local deb="$1" data ctl
     data=$(ar t "$deb" | grep '^data\.tar') || handle_error "$deb no tiene data.tar."
     ctl=$(ar t "$deb" | grep '^control\.tar') || handle_error "$deb no tiene control.tar."
     # --keep-directory-symlink: /lib y /usr/sbin son enlaces en Fedora
-    ar p "$deb" "$data" | tar -x --keep-directory-symlink -f - -C / || handle_error "no se pudo extraer $deb."
+    deb_member "$deb" "$data" | tar -x --keep-directory-symlink -f - -C / || handle_error "no se pudo extraer $deb."
 
     local tmp
     tmp=$(mktemp -d)
-    ar p "$deb" "$ctl" | tar -x -f - -C "$tmp"
+    deb_member "$deb" "$ctl" | tar -x -f - -C "$tmp"
     if [ -f "$tmp/postinst" ]; then
         mkdir -p /tmp/log/theftdeterrentclient/client /tmp/log/theftdeterrentclient/guardian /tmp/log/theftdeterrentdaemon/tpmdaemon
         timeout 180 sh "$tmp/postinst" </dev/null || echo "Advertencia: el postinst de $deb devolvió error."
