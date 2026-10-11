@@ -222,6 +222,20 @@ fix_selinux() {
     restorecon -R /usr/local/theftdeterrentclient /usr/local/theftdeterrentdaemon /opt/TheftDeterrentclient 2>/dev/null || true
 }
 
+# El agente lee la versión del SO de /etc/issue y aborta si no tiene el formato de Debian/Ubuntu
+# ("Nombre Versión \n \l"). Fedora usa "\S", así que se le monta un issue propio solo al servicio.
+fix_agent_issue() {
+    [ -r /etc/os-release ] || return 0
+    local pretty
+    pretty=$(. /etc/os-release && echo "$PRETTY_NAME")
+    mkdir -p /usr/local/theftdeterrentclient /etc/systemd/system/theftdeterrent-agent.service.d
+    printf '%s \\n \\l\n\n' "$pretty" > /usr/local/theftdeterrentclient/issue
+    cat > /etc/systemd/system/theftdeterrent-agent.service.d/fedora-issue.conf <<'EOF'
+[Service]
+BindReadOnlyPaths=/usr/local/theftdeterrentclient/issue:/etc/issue
+EOF
+}
+
 install_files_rpm() {
     # orden: librerías, daemon, guardian, cliente
     for FILE in "${FILES[@]}"; do
@@ -229,6 +243,7 @@ install_files_rpm() {
         extract_deb "$FILE"
     done
     fix_selinux
+    fix_agent_issue
     chmod +x /opt/TheftDeterrentclient/client/* /usr/local/theftdeterrentclient/*/* /usr/local/theftdeterrentdaemon/* /usr/sbin/tpmdaemon 2>/dev/null || true
     systemctl daemon-reload
     for svc in theftdeterrent-tpmdaemon theftdeterrent-guardian theftdeterrent-agent; do

@@ -55,6 +55,7 @@ Opciones disponibles con `sudo bash install.sh --help`. La salida queda registra
 - Instala con `dnf` las herramientas para abrir los `.deb` (`binutils`, `tar`, `xz`). `python2.7` ya no está en los repositorios de Fedora 44; no hace falta, el cliente trae su propio `libpython2.7`.
 - Extrae los cuatro paquetes en `/` y ejecuta sus `postinst`.
 - Marca las carpetas de Theft Deterrent como `bin_t` en SELinux, para que systemd pueda ejecutarlas.
+- Le da al servicio del agente un `/etc/issue` con formato Debian (solo para ese servicio): sin esto el agente se cierra al arrancar porque no entiende el de Fedora.
 - Habilita e inicia los servicios `theftdeterrent-tpmdaemon`, `theftdeterrent-guardian` y `theftdeterrent-agent`.
 
 Si un servicio no arranca, revisar `journalctl -u theftdeterrent-agent` y `sudo ausearch -m avc -ts recent`. La extensión de GNOME Shell del cliente es de la era GNOME 3 y puede no cargar en versiones actuales; el cliente se abre igual con `theftdeterrentclient`.
